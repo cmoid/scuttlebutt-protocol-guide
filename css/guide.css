@@ -367,6 +367,15 @@ table.clock-values tbody td:first-child {
     grid-column: 2;
 }
 
+/* A language name wider than the 30px label column — "Erlang" is about
+   48px at this size, where "JS" and "Go" are under 20 — otherwise spills
+   into the file names beside it.  Give it its own row instead of a wider
+   column: the aside sits in a 120px gutter, so taking width from the
+   label leaves less for file names that already wrap. */
+.impl.wide .lang {
+    grid-column: 1 / -1;
+}
+
 .code {
     margin: 1rem 0 4rem;
 }

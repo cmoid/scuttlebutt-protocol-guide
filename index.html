@@ -1932,7 +1932,7 @@ assert_nacl_sign_verify_detached(
         <p>Every feed described so far has been complete: a peer that has a feed has it from sequence 1. That assumption is convenient and it is not guaranteed. A peer may hold only the <em>end</em> of a feed &mdash; every message from some sequence <var>N</var> onwards, and nothing before it &mdash; and there may be no peer anywhere that still holds the beginning.</p>
         <p>This happens when an author <em>archives</em> older parts of their own feed. The messages are moved out of the live log into a compressed segment, and a message is published to say so. Other peers may then choose to replicate the feed from that point rather than from its start, which saves them fetching and validating history they have decided they do not need. A peer that starts a feed this way never holds what is underneath, and cannot serve it to anybody else.</p>
 
-        <aside class="impl">
+        <aside class="impl wide">
             <img class="icon" src="img/impl.png" alt=""/>
             <h5>Implementations</h5>
             <div class="lang">Erlang</div>
@@ -2014,7 +2014,7 @@ assert_nacl_sign_verify_detached(
         <p>A client replicates the feeds it follows, and usually the feeds those feeds follow, out to some hop count. Just beyond that limit is a much larger set of feeds it knows <em>of</em> but holds nothing from &mdash; on a modest node, tens of thousands of them. Each is a public key and nothing else: no name, no picture, no way to tell whether it is worth having.</p>
         <p>A <em>glimpse</em> is a small signed artifact an author publishes to describe their own feed, so that somebody at that boundary can decide whether to replicate it without replicating it first.</p>
 
-        <aside class="impl">
+        <aside class="impl wide">
             <img class="icon" src="img/impl.png" alt=""/>
             <h5>Implementations</h5>
             <div class="lang">Erlang</div>
