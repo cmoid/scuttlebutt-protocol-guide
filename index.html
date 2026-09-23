@@ -1935,8 +1935,8 @@ assert_nacl_sign_verify_detached(
         </div>
 
         <h3 id="partial-feeds">Partial feeds</h3>
-        <p>Every feed described so far has been complete: a peer that has a feed has it from sequence 1. That assumption is convenient and it is not guaranteed. A peer may hold only the <em>end</em> of a feed &mdash; every message from some sequence <var>N</var> onwards, and nothing before it &mdash; and there may be no peer anywhere that still holds the beginning.</p>
-        <p>This happens when an author <em>archives</em> older parts of their own feed. The messages are moved out of the live log into a compressed segment, and a message is published to say so. Other peers may then choose to replicate the feed from that point rather than from its start, which saves them fetching and validating history they have decided they do not need. A peer that starts a feed this way never holds what is underneath, and cannot serve it to anybody else.</p>
+        <p>The immutabe append-only feed is at the heart of scuttlebutt. Over time though feeds become very lengthy. This is particularly onerous when a new user is on-boarding many feeds. Partial feeds address this problem. Though they are partial the entire feed is still avaliable for validation if necessary.
+        <p>Partial feeds are created when an author <em>archives</em> older parts of their own feed. The messages are moved out of the live log into a compressed segment, and a message is published to say so. Other peers may then choose to replicate the feed from that point rather than from its start, which saves them fetching and validating history they have decided they do not need. A peer that starts a feed this way never holds what is underneath, and cannot serve it to anybody else.</p>
 
         <aside class="impl wide">
             <img class="icon" src="img/impl.png" alt=""/>
