@@ -99,6 +99,12 @@
                         <div><a href="#decrypting">Decrypting</a></div>
                     </div>
                 </div>
+                <div class="section">
+                    <div><a class="s1" href="#extensions">Extensions</a></div>
+                    <div class="s2">
+                        <div><a href="#partial-feeds">Partial feeds</a></div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -1907,6 +1913,101 @@ assert_nacl_sign_verify_detached(
         <p>Decrypting a private message involves scanning through the series of header secret boxes to see if any of them open using your long-term secret key. Then, if one of them opens, taking out the body secret key and using it to open the secret box holding the message content:</p>
         <img src="img/private_message_decrypt.png" class="pagewidth" style="height: 980px;" alt="base64-decode the message, extract the nonce and the public header key at the beginning. Then use the secret long-term key and the header public key to compute the shared secret. Read the first 49 bytes of the encrypted headers and try to open it as a secret box. If that fails, try the next 49 bytes. Keep trying up to 7 times. If the shared secret opens a secret box, then this message is intended for you. Read the number of recipients and body secret key. Now that you know how many recipients there are, skip forward 49 bytes for each remaining header. Finally open the secret box using the body secret key and read the content."/>
 	<hr/>
+        <h2 id="extensions">Extensions</h2>
+        <div>
+            <aside>
+                <p>
+                The sections below describe optional extensions to the protocol. They are
+                additive: an implementation that knows nothing about them is still a correct
+                Scuttlebutt implementation, and nothing in them changes the message format,
+                the handshake, or how feeds are validated. They are documented here because
+                a peer that <em>has</em> implemented one is visible to a peer that has not,
+                and it is better to know what you are looking at.
+                </p>
+            </aside>
+        </div>
+
+        <h3 id="partial-feeds">Partial feeds</h3>
+        <p>Every feed described so far has been complete: a peer that has a feed has it from sequence 1. That assumption is convenient and it is not guaranteed. A peer may hold only the <em>end</em> of a feed &mdash; every message from some sequence <var>N</var> onwards, and nothing before it &mdash; and there may be no peer anywhere that still holds the beginning.</p>
+        <p>This happens when an author <em>archives</em> older parts of their own feed. The messages are moved out of the live log into a compressed segment, and a message is published to say so. Other peers may then choose to replicate the feed from that point rather than from its start, which saves them fetching and validating history they have decided they do not need. A peer that starts a feed this way never holds what is underneath, and cannot serve it to anybody else.</p>
+
+        <aside class="impl">
+            <img class="icon" src="img/impl.png" alt=""/>
+            <h5>Implementations</h5>
+            <div class="lang">Erlang</div>
+            <div class="vs"><a href="https://github.com/cmoid/erlbutt/blob/main/apps/ssb/src/ssb_archives.erl">ssb_archives.erl</a>, <a href="https://github.com/cmoid/erlbutt/blob/main/apps/ssb/src/feed_floor.erl">feed_floor.erl</a></div>
+        </aside>
+
+        <p>The author marks the boundary with an ordinary signed message in their own feed:</p>
+
+        <pre><code>{
+  "type": "archive",
+  "archive": "&amp;M+DubXpLOJC3HTr5YPRwc9tJdZITG8CqJqLT8RsD1iA=.sha256",
+  "size": 1245184,
+  "from_sequence": 1,
+  "to_sequence": 12527,
+  "from_timestamp": 1490000000000,
+  "to_timestamp": 1787000000000
+}</code></pre>
+
+        <p>The <code>archive</code> field names a blob holding the messages from <code>from_sequence</code> to <code>to_sequence</code>. The sizes and timestamps are there so that a peer can decide whether it wants that history before fetching it. Like any other message type, a client that does not recognise <code>archive</code> ignores it.</p>
+
+        <p>The message itself is unremarkable. What matters for interoperability is the state it leads to, which is that <strong>a peer may be unable to serve the start of a feed it otherwise has</strong>. Two transports, two different ways of saying so.</p>
+
+        <p>Over <em>createHistoryStream</em>, a request that starts below what the peer holds is answered with an error rather than an empty stream. Ending the stream normally would claim &ldquo;that is the whole feed&rdquo;, which is untrue:</p>
+
+        <figure class="request-response">
+            <div class="request">
+                <div class="header">
+                    <span class="key">Request number</span><span class="value">1</span>
+                    <span class="key">Body type</span><span class="value">JSON</span>
+                    <span class="key">Stream</span><span class="value">Yes</span>
+                    <span class="key">End/err</span><span class="value">No</span>
+                </div>
+                <pre><code>{
+  "name": ["createHistoryStream"],
+  "type": "source",
+  "args": [
+    {
+      "id": "@FCX/tsDLpubCPKKfIrw4gc+SQkHcaD17s7GI6i/ziWY=.ed25519",
+      "sequence": 1
+    }
+  ]
+}</code></pre>
+            </div>
+            <img class="request-arrow" src="img/arrow.png" alt=""/>
+            <img class="response-arrow" src="img/arrow.png" alt=""/>
+            <div class="response">
+                <div class="header">
+                    <span class="key">Request number</span><span class="value">-1</span>
+                    <span class="key">Body type</span><span class="value">JSON</span>
+                    <span class="key">Stream</span><span class="value">Yes</span>
+                    <span class="key">End/err</span><span class="value">Yes</span>
+                </div>
+                <pre><code>{
+  "name": "Error",
+  "message": "history before sequence 12528 is not available from this node"
+}</code></pre>
+            </div>
+        </figure>
+
+        <p>The error is sent with the <em>stream</em> flag set as well as <em>end/err</em>. A standard client does not route an error that arrives without the stream flag, and will wait for a response that never comes.</p>
+
+        <p>Over <a href="#ebt-replication">EBT</a> there is no equivalent, because a note is a vector clock and a vector clock has no per-feed error channel. A peer that cannot serve a feed from the requested sequence simply sends nothing for it. This is a real limitation rather than an oversight: a clock entry expresses a <em>prefix</em> &mdash; &ldquo;I have this feed up to sequence <var>N</var>&rdquo; &mdash; and there is no way to say &ldquo;I have it from sequence <var>N</var> onwards&rdquo;. A peer holding only the end of a feed cannot advertise that fact, so its silence is the only signal available.</p>
+
+        <p>An implementation talking to peers that may hold partial feeds should therefore:</p>
+        <ul>
+            <li>treat the error above as &ldquo;not from this peer&rdquo; rather than &ldquo;no such feed&rdquo;, and ask somebody else;</li>
+            <li>not assume that silence over EBT means a feed has no new messages;</li>
+            <li>keep validating the previous-message chain on everything it receives.</li>
+        </ul>
+
+        <p>The last of those is the one that matters even if you never implement any of this. A peer that sends history a requester cannot chain onto what it already holds is handing over orphans. A strict client rejects them, which is merely noisy. A lenient client &mdash; and not every client checks the chain &mdash; stores them as though they were the feed and then relays them onward, which is how one truncated feed becomes several corrupted replicas. Refusing is the safe answer, and checking the chain is what makes a refusal unnecessary.</p>
+
+        <aside>
+            <p>Fetching the archived history itself &mdash; the segment format, and how a peer verifies that a segment joins the chain where it claims to &mdash; is deliberately not described here. An implementation is fully correct without it: it simply replicates what its peers can serve. For the design reasoning, and the open problems, see <a href="https://github.com/cmoid/erlbutt/blob/main/doc/research/archive-boundaries.md" target="_blank">archive boundaries</a>.</p>
+        </aside>
+
         <h2>Archived material</h2>
         <div>
 	    <aside>
