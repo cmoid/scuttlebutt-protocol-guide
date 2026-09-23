@@ -103,6 +103,7 @@
                     <div><a class="s1" href="#extensions">Extensions</a></div>
                     <div class="s2">
                         <div><a href="#partial-feeds">Partial feeds</a></div>
+                        <div><a href="#glimpses">Feed glimpses</a></div>
                     </div>
                 </div>
             </div>
@@ -1935,7 +1936,8 @@ assert_nacl_sign_verify_detached(
             <img class="icon" src="img/impl.png" alt=""/>
             <h5>Implementations</h5>
             <div class="lang">Erlang</div>
-            <div class="vs"><a href="https://github.com/cmoid/erlbutt/blob/main/apps/ssb/src/ssb_archives.erl">ssb_archives.erl</a>, <a href="https://github.com/cmoid/erlbutt/blob/main/apps/ssb/src/feed_floor.erl">feed_floor.erl</a></div>
+            <div class="vs"><a href="https://github.com/cmoid/erlbutt/blob/main/apps/ssb/src/ssb_archives.erl">ssb_archives.erl</a></div>
+            <div class="vs"><a href="https://github.com/cmoid/erlbutt/blob/main/apps/ssb/src/feed_floor.erl">feed_floor.erl</a></div>
         </aside>
 
         <p>The author marks the boundary with an ordinary signed message in their own feed:</p>
@@ -2006,6 +2008,95 @@ assert_nacl_sign_verify_detached(
 
         <aside>
             <p>Fetching the archived history itself &mdash; the segment format, and how a peer verifies that a segment joins the chain where it claims to &mdash; is deliberately not described here. An implementation is fully correct without it: it simply replicates what its peers can serve. For the design reasoning, and the open problems, see <a href="https://github.com/cmoid/erlbutt/blob/main/doc/research/archive-boundaries.md" target="_blank">archive boundaries</a>.</p>
+        </aside>
+
+        <h3 id="glimpses">Feed glimpses</h3>
+        <p>A client replicates the feeds it follows, and usually the feeds those feeds follow, out to some hop count. Just beyond that limit is a much larger set of feeds it knows <em>of</em> but holds nothing from &mdash; on a modest node, tens of thousands of them. Each is a public key and nothing else: no name, no picture, no way to tell whether it is worth having.</p>
+        <p>A <em>glimpse</em> is a small signed artifact an author publishes to describe their own feed, so that somebody at that boundary can decide whether to replicate it without replicating it first.</p>
+
+        <aside class="impl">
+            <img class="icon" src="img/impl.png" alt=""/>
+            <h5>Implementations</h5>
+            <div class="lang">Erlang</div>
+            <div class="vs"><a href="https://github.com/cmoid/erlbutt/blob/main/apps/ssb/src/ssb_glimpses.erl">ssb_glimpses.erl</a></div>
+            <div class="vs"><a href="https://github.com/cmoid/erlbutt/blob/main/apps/ssb/src/glimpse_discovery.erl">glimpse_discovery.erl</a></div>
+        </aside>
+
+        <p>Like an <a href="#partial-feeds">archive boundary</a>, a glimpse is an ordinary signed message in the author&rsquo;s own feed naming a blob:</p>
+
+        <pre><code>{
+  "type": "glimpse",
+  "blob": "&amp;yhpmqp5DCKeVHn8xb8nZABir3OYirzVKDCi/Q0ZSFGg=.sha256",
+  "size": 412,
+  "updated": 1789948831558
+}</code></pre>
+
+        <p>The blob holds whatever the author chooses to be represented by. <strong>Its contents are deliberately unspecified.</strong> What a feed should say about itself is an editorial decision, and a protocol that dictates it will be wrong for somebody; a reader is expected to ignore fields it does not recognise. A client that does not know the <code>glimpse</code> type ignores the message, as it already ignores many others.</p>
+
+        <h4 id="glimpses-verifying">Verifying one you have no feed for</h4>
+        <p>The awkward-looking part of this is reading a message from a feed you hold nothing of &mdash; no predecessor to chain onto, no prior state to check against. It is not actually awkward, because of a property Scuttlebutt already has: <strong>a feed identifier is an ed25519 public key</strong>.</p>
+        <p>So the name of the thing a glimpse claims to come from <em>is</em> the key that validates it. A peer hands over the whole signed message, and the receiver verifies the signature against the feed id it was curious about in the first place. No feed, no chain, no predecessor required.</p>
+        <p>Note what this does and does not establish. It proves the author wrote <em>a</em> glimpse. It does not prove this is their newest one, because nothing anchors it &mdash; a peer may serve any glimpse an author ever signed. A glimpse is therefore <em>advisory</em>: it informs one decision, whether to start replicating a feed, and that decision should stay cheap to reverse.</p>
+
+        <h4 id="glimpses-offers">Exchanging them</h4>
+        <p>Glimpses are not carried by <a href="#ebt-replication">EBT</a>. A vector clock entry expresses a prefix &mdash; &ldquo;I have this feed up to sequence <var>N</var>&rdquo; &mdash; and a glimpse is a <em>selection</em>: one message out of a feed the receiver otherwise holds nothing of. As with <a href="#partial-feeds">partial feeds</a>, the clock has no way to say it. They need their own method, which is what makes this additive: a peer that has not implemented it is never asked for anything it cannot answer.</p>
+        <p>A peer asks for everything the other holds, and filters on arrival:</p>
+
+        <figure class="request-response">
+            <div class="request">
+                <div class="header">
+                    <span class="key">Request number</span><span class="value">1</span>
+                    <span class="key">Body type</span><span class="value">JSON</span>
+                    <span class="key">Stream</span><span class="value">Yes</span>
+                    <span class="key">End/err</span><span class="value">No</span>
+                </div>
+                <pre><code>{
+  "name": ["glimpses", "offers"],
+  "type": "source",
+  "args": []
+}</code></pre>
+            </div>
+            <img class="request-arrow" src="img/arrow.png" alt=""/>
+            <img class="response-arrow" src="img/arrow.png" alt=""/>
+            <div class="response">
+                <div class="header">
+                    <span class="key">Request number</span><span class="value">-1</span>
+                    <span class="key">Body type</span><span class="value">JSON</span>
+                    <span class="key">Stream</span><span class="value">Yes</span>
+                    <span class="key">End/err</span><span class="value">No</span>
+                </div>
+                <pre><code>{
+  "previous": "%XphMUkWQtomKjXQvFGfsGYpt69sgEY7Y4Vou9cEuJho=.sha256",
+  "author": "@FCX/tsDLpubCPKKfIrw4gc+SQkHcaD17s7GI6i/ziWY=.ed25519",
+  "sequence": 12594,
+  "timestamp": 1789948831558,
+  "hash": "sha256",
+  "content": {
+    "type": "glimpse",
+    "blob": "&amp;yhpmqp5DCKeVHn8xb8nZABir3OYirzVKDCi/Q0ZSFGg=.sha256",
+    "size": 412,
+    "updated": 1789948831558
+  },
+  "signature": "GEZmGXMB0p6NZavpGo0PkT4WCPzKoO6zT2vHRbh5+A0RDh1
+yPkxJdvRlbuQK0wbEJLBZkYcK1KRTwdPE5FzBAQ==.sig.ed25519"
+}</code></pre>
+            </div>
+        </figure>
+
+        <p>Each response frame is a message <em>value</em>, in the same form <a href="#ebt-replication">EBT</a> puts messages on the wire. The stream ends when the peer has offered everything it holds.</p>
+
+        <p>Nobody names a feed on the wire, and that is deliberate. The set a receiver is curious about &mdash; everything one hop beyond what it replicates &mdash; runs to tens of thousands of identifiers, and sending those to every peer on every exchange, to hear &ldquo;no&rdquo; about nearly all of them, costs far more than receiving the short list of glimpses a peer actually holds.</p>
+
+        <p>Two rules keep the exchange safe, and an implementation should follow both:</p>
+        <ul>
+            <li><strong>Offer only glimpses for feeds you replicate.</strong> Those you hold through ordinary validated replication, and passing one on is handing over a sealed envelope: the receiver checks the author&rsquo;s signature and never has to trust the carrier. Re-offering glimpses you were merely handed spreads self-descriptions for feeds nobody involved carries.</li>
+            <li><strong>Decide candidacy from your own follow graph, not from the offer.</strong> Consider a glimpse only for a feed already reachable through feeds you replicate. A peer can then make a feed at your boundary look more interesting than it is &mdash; which is a person being uninteresting, not an attack &mdash; but it cannot introduce a feed you had no path to.</li>
+        </ul>
+
+        <p>The second rule is the one that matters. Without it, a peer can put arbitrary identities in front of a user and induce them to replicate anything at all.</p>
+
+        <aside>
+            <p>What a glimpse is for, why it is written by the author rather than attested by peers, and what it costs, are argued in <a href="https://github.com/cmoid/erlbutt/blob/main/doc/research/feed-glimpses.md" target="_blank">feed glimpses</a>.</p>
         </aside>
 
     </main>
