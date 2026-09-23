@@ -1918,12 +1918,18 @@ assert_nacl_sign_verify_detached(
         <div>
             <aside>
                 <p>
-                The sections below describe optional extensions to the protocol. They are
+                The sections below describe proposed optional extensions to the protocol. They are
                 additive: an implementation that knows nothing about them is still a correct
                 Scuttlebutt implementation, and nothing in them changes the message format,
-                the handshake, or how feeds are validated. They are documented here because
-                a peer that <em>has</em> implemented one is visible to a peer that has not,
-                and it is better to know what you are looking at.
+                the handshake, or how feeds are validated.
+                </p>
+                <p>
+                They are documented here for two different reasons. One extension changes
+                what a peer is able to serve, so an implementation may encounter it whether
+                or not it has adopted it, and is better off recognising what it is seeing.
+                The other does nothing at all unless both ends implement it, and is
+                written down so that a second implementation can be compatible with the
+                first.
                 </p>
             </aside>
         </div>
@@ -2039,7 +2045,7 @@ assert_nacl_sign_verify_detached(
         <p>Note what this does and does not establish. It proves the author wrote <em>a</em> glimpse. It does not prove this is their newest one, because nothing anchors it &mdash; a peer may serve any glimpse an author ever signed. A glimpse is therefore <em>advisory</em>: it informs one decision, whether to start replicating a feed, and that decision should stay cheap to reverse.</p>
 
         <h4 id="glimpses-offers">Exchanging them</h4>
-        <p>Glimpses are not carried by <a href="#ebt-replication">EBT</a>. A vector clock entry expresses a prefix &mdash; &ldquo;I have this feed up to sequence <var>N</var>&rdquo; &mdash; and a glimpse is a <em>selection</em>: one message out of a feed the receiver otherwise holds nothing of. As with <a href="#partial-feeds">partial feeds</a>, the clock has no way to say it. They need their own method, which is what makes this additive: a peer that has not implemented it is never asked for anything it cannot answer.</p>
+        <p>Glimpses are not carried by <a href="#ebt-replication">EBT</a>. A vector clock entry expresses a prefix &mdash; &ldquo;I have this feed up to sequence <var>N</var>&rdquo; &mdash; and a glimpse is a <em>selection</em>: one message out of a feed the receiver otherwise holds nothing of. As with <a href="#partial-feeds">partial feeds</a>, the clock has no way to say it. They need their own method, which is what keeps this additive: the exchange is a separate request that carries nothing on the replication path, and a peer that has not implemented it answers an unknown method the way it answers any other.</p>
         <p>A peer asks for everything the other holds, and filters on arrival:</p>
 
         <figure class="request-response">
